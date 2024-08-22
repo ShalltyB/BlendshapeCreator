@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <SharedGUID>27a8ff44-f3c8-4e74-9158-90f10379abc0</SharedGUID>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <Import_RootNamespace>BlendshapeCreator.Core</Import_RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)BlendshapeCreator.CharaController.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendshapeCreator.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendshapeCreator.SceneController.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendshapeCreator.Hooks.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendshapeCreator.MeshUtils.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)BlendshapeCreator.TextureBaker.cs" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)Resources\guiskin.unity3d" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)Resources\bonelyfans.shader" />
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)Resources\bonelyfans.unity3d" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)Resources\guiskindata.json" />
+  </ItemGroup>
+</Project>
