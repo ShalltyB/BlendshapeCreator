@@ -22,6 +22,7 @@ using ToolBox.Extensions;
 using UniRx;
 using UnityEngine;
 using KKAPI.Studio;
+using HSPE;
 #if HS2
 using AIChara;
 #endif
@@ -31,6 +32,7 @@ namespace BlendshapeCreator
     [BepInPlugin(GUID, PluginName, Version)]
     [BepInDependency(KKAPI.KoikatuAPI.GUID, KKAPI.KoikatuAPI.VersionConst)]
     [BepInDependency(ExtensibleSaveFormat.ExtendedSave.GUID, ExtensibleSaveFormat.ExtendedSave.Version)]
+    [BepInDependency(HSPE.HSPE.GUID, BepInDependency.DependencyFlags.SoftDependency)]
     public class BlendshapeCreator : BaseUnityPlugin
     {
         // My first plugin!, thanks to Njaecha and Marco :)
@@ -48,10 +50,9 @@ namespace BlendshapeCreator
 #elif HS2
         public const string PluginNameInternal = "HS2_BlendshapeCreator";
 #endif
-        public const string Version = "1.0";
+        public const string Version = "1.1";
         private const int _uniqueId = ('B' << 24) | ('S' << 16) | ('C' << 8) | 'T';
         internal static new ManualLogSource Logger;
-        internal static Type blendShapeEditorType;
 
         #endregion CONFIG VARIABLES
 
@@ -77,25 +78,27 @@ namespace BlendshapeCreator
 
         #region UI VARIABLES
 
-        private SidebarToggle toggleBS;
-        private ConfigEntry<KeyboardShortcut> keyShortcut;
         private Rect windowRect = new Rect(80, 300, 210, 440f);
         private Color defColor = GUI.color;
         public static bool toggleUI = false;
-        private bool exportTextures = true;
-        private bool inverseX = true;
-        private bool bakeMesh = true;
+        private SidebarToggle toggleBS;
+
+        private ConfigEntry<KeyboardShortcut> keyShortcut;
+        private ConfigEntry<bool> exportTextures;
+        private ConfigEntry<bool> inverseX;
+        private ConfigEntry<bool> bakeMesh;
+        private ConfigEntry<bool> highlightEnabled;
+        private ConfigEntry<bool> showOnlyBSC;
+        private ConfigEntry<bool> showHidden;
+
         private bool showHelp = false;
         private bool shiftKey = false;
         private string blendShapesSearch = "";
         private string RenderersSearch = "";
-        private bool highlightEnabled = true;
         public string path = "";
         private Vector2 scrollPosition;
         private Vector2 blendShapesScroll;
         private bool showBlendshapeData = false;
-        private bool showOnlyBSC = false;
-        private bool showHidden = true;
         private float rectDefaultWidth = 250f;
         private float rectDefaultHeight = 523f;
         private float rectBlendshapeSlidersWidth = 647f;
@@ -226,6 +229,11 @@ namespace BlendshapeCreator
                 foreach (BlendShape blendShape in blendShapes)
                     if (blendShape != null)
                         blendShape.LoadBlendShape(t, skipExisting);
+
+                if (KKAPI.KoikatuAPI.GetCurrentGameMode() == KKAPI.GameMode.Studio)
+                {
+                    t?.gameObject.GetComponent<PoseController>()?._blendShapesEditor?.RefreshSkinnedMeshRendererList();
+                }
             }
         }
 
@@ -300,21 +308,6 @@ namespace BlendshapeCreator
 #endif
             _self = this;
 
-            /// Load KKPE
-
-            Chainloader.PluginInfos.TryGetValue("com.joan6694.kkplugins.kkpe", out PluginInfo pluginInfo);
-            if (pluginInfo != null && pluginInfo.Instance != null)
-            {
-                blendShapeEditorType = pluginInfo.Instance.GetType().Assembly.GetType("HSPE.PoseController");
-            }
-            else
-            {
-                blendShapeEditorType = null;
-                Logger.LogWarning("There was a problem loading KKPE.");
-            }
-
-            //
-
             textureBaker = gameObject.GetOrAddComponent<TextureBaker>();
 
             var _defaultDir = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "BlendshapeCreator");
@@ -327,11 +320,18 @@ namespace BlendshapeCreator
             keyShortcut = Config.Bind("MAIN", "Keyboard shortcut", _keyShortcut, "Press this button to launch the UI.");
             defaultDir = Config.Bind("MAIN", "Default directory", _defaultDir, "The default location for the file dialog box.");
 
-            #endregion BEPINEX CONFIG
+            exportTextures = Config.Bind("MAIN", "Export textures", true, "Export textures to PNG files.");
+            inverseX = Config.Bind("MAIN", "Inverse X", true, "Inverse X axis.");
+            bakeMesh = Config.Bind("MAIN", "Bake mesh", true, "Bake mesh.");
+            highlightEnabled = Config.Bind("MAIN", "Highlight enabled", true, "Highlight selected renderer.");
+            showOnlyBSC = Config.Bind("MAIN", "Hide vanilla blendshapes", true, "Only show the BlendShapes created by this plugin.");
+            showHidden = Config.Bind("MAIN", "Show hidden", false, "Show hidden objects in the list.");
+
+        #endregion BEPINEX CONFIG
 
             #region EXTRA BEHAVIOURS
 
-            StudioSaveLoadApi.RegisterExtraBehaviour<SceneController>(GUID);
+        StudioSaveLoadApi.RegisterExtraBehaviour<SceneController>(GUID);
             CharacterApi.RegisterExtraBehaviour<CharacterController>(GUID);
 
             #endregion EXTRA BEHAVIOURS
@@ -535,7 +535,7 @@ namespace BlendshapeCreator
 
                     GUILayout.BeginHorizontal();
 
-                    showHidden = GUILayout.Toggle(showHidden, new GUIContent("Show Hidden", "Show all the renderers, even the hidden ones (if any)"));
+                    showHidden.Value = GUILayout.Toggle(showHidden.Value, new GUIContent("Show Hidden", "Show all the renderers, even the hidden ones (if any)"));
 
                     if (GUILayout.Button(new GUIContent("Refresh List", "Refresh list of renderers, do it to update the meshes (after changing clothes/accs/etc)")))
                         RefreshRenderersList();
@@ -581,7 +581,7 @@ namespace BlendshapeCreator
                             Renderer renderer = allRenderers[i];
                             if (renderer == null) continue;
 
-                            if (!showHidden && (!renderer.gameObject.activeInHierarchy || !renderer.enabled)) continue;
+                            if (!showHidden.Value && (!renderer.gameObject.activeInHierarchy || !renderer.enabled)) continue;
 
                             var meshName = renderer.name;
                             if (IsFilterMatch(meshName))
@@ -702,15 +702,15 @@ namespace BlendshapeCreator
                     #region TOGGLES
 
                     GUI.enabled = true;
-                    exportTextures = GUILayout.Toggle(exportTextures, new GUIContent("Export Textures", "Export the main texture of the selected meshes along with their .mtl file"));
-                    inverseX = GUILayout.Toggle(inverseX, new GUIContent("Mirror X Axis", "Mirror the X axis when importing a BlendShape"));
-                    bakeMesh = GUILayout.Toggle(bakeMesh, new GUIContent("Bake Mesh", "The exported meshes will be baked with the current pose"));
+                    exportTextures.Value = GUILayout.Toggle(exportTextures.Value, new GUIContent("Export Textures", "Export the main texture of the selected meshes along with their .mtl file"));
+                    inverseX.Value = GUILayout.Toggle(inverseX.Value, new GUIContent("Mirror X Axis", "Mirror the X axis when importing a BlendShape"));
+                    bakeMesh.Value = GUILayout.Toggle(bakeMesh.Value, new GUIContent("Bake Mesh", "The exported meshes will be baked with the current pose"));
 
-                    IMGUIExtensions.BoolValue("Highlight Selected", highlightEnabled, (b) =>
+                    IMGUIExtensions.BoolValue("Highlight Selected", highlightEnabled.Value, (b) =>
                     {
                         ClearHighlightRenderer(true, null);
-                        highlightEnabled = b;
-                        if (highlightEnabled)
+                        highlightEnabled.Value = b;
+                        if (highlightEnabled.Value)
                         {
                             if (selectedRenderer != null)
                                 HighlightRenderer(selectedRenderer, false);
@@ -755,7 +755,7 @@ namespace BlendshapeCreator
                         }
                         GUILayout.EndHorizontal();
 
-                        showOnlyBSC = GUILayout.Toggle(showOnlyBSC, new GUIContent("Hide vanilla blendshapes", "Only show the BlendShapes created by this plugin"));
+                        showOnlyBSC.Value = GUILayout.Toggle(showOnlyBSC.Value, new GUIContent("Hide vanilla blendshapes", "Only show the BlendShapes created by this plugin"));
 
                         GUILayout.BeginVertical(GUI.skin.box);
                         blendShapesScroll = GUILayout.BeginScrollView(blendShapesScroll, false, true, GUILayout.ExpandWidth(false));
@@ -766,18 +766,21 @@ namespace BlendshapeCreator
                             string blendShapeName = skinnedMeshRenderer.sharedMesh.GetBlendShapeName(i);
                             if (blendShapeName.IndexOf(blendShapesSearch, StringComparison.CurrentCultureIgnoreCase) != -1)
                             {
-                                var shouldShow = !showOnlyBSC;
+                                var shouldShow = !showOnlyBSC.Value;
                                 zeroResult = false;
                                 float blendShapeWeight = skinnedMeshRenderer.GetBlendShapeWeight(i);
+                                
 
                                 GUILayout.BeginHorizontal();
                                 GUILayout.BeginVertical(GUILayout.ExpandHeight(false));
                                 GUILayout.BeginHorizontal();
                                 if (KKAPI.KoikatuAPI.GetCurrentGameMode() == KKAPI.GameMode.Studio)
                                 {
+                                    string path = skinnedMeshRenderer.transform.GetPathFrom(firstObject.guideObject.transformTarget);
                                     if (ociBlendShapesData.ContainsKey(firstObject))
                                     {
-                                        int index = ociBlendShapesData[firstObject].blendShapes.Select(x => x.name).ToList().IndexOf(blendShapeName);
+                                        //int index = ociBlendShapesData[firstObject].blendShapes.Select(x => x.name).ToList().IndexOf(blendShapeName);
+                                        int index = ociBlendShapesData[firstObject].blendShapes.FindIndex(x => x.name == blendShapeName && x.rendererPath == path);
                                         if (index != -1)
                                         {
                                             GUI.color = Color.red;
@@ -798,7 +801,9 @@ namespace BlendshapeCreator
                                         var controller = chara.GetChaControl().GetComponent<CharacterController>();
                                         if (controller != null && controller.CharaBlendShapesData != null)
                                         {
-                                            int index = controller.CharaBlendShapesData.blendShapes.Select(x => x.name).ToList().IndexOf(blendShapeName);
+                                           
+                                            // Search in CharaBlendShapes the blendshape index by name and renderer path.
+                                            int index = controller.CharaBlendShapesData.blendShapes.FindIndex(x => x.name == blendShapeName && x.rendererPath == path);
                                             if (index != -1)
                                             {
                                                 GUI.color = Color.red;
@@ -820,8 +825,9 @@ namespace BlendshapeCreator
                                     ChaControl chaCtrl = MakerAPI.GetCharacterControl();
                                     var controller = chaCtrl.gameObject.GetComponent<CharacterController>();
                                     var CharaBlendShapes = controller.CharaBlendShapesData;
+                                    string path = skinnedMeshRenderer.transform.GetPathFrom(chaCtrl.transform);
 
-                                    int index = CharaBlendShapes.blendShapes.Select(x => x.name).ToList().IndexOf(blendShapeName);
+                                    int index = controller.CharaBlendShapesData.blendShapes.FindIndex(x => x.name == blendShapeName && x.rendererPath == path);
                                     if (index != -1)
                                     {
                                         GUI.color = Color.red;
@@ -1154,11 +1160,11 @@ namespace BlendshapeCreator
                         if (rend is SkinnedMeshRenderer smr)
                         {
                             // Skinning
-                            boneMatrices = smr.bones.Select(x => x.localToWorldMatrix).ToArray();
+                            boneMatrices = smr.bones?.Where(x => x != null).Select(x => x.localToWorldMatrix)?.ToArray();
                             boneWeights = mesh.boneWeights;
                         }
 
-                        if (exportTextures && textureBaker != null)
+                        if (exportTextures.Value && textureBaker != null)
                         {
                             var mat = rend.sharedMaterial;
                             if (mat != null)
@@ -1204,7 +1210,7 @@ namespace BlendshapeCreator
 
                             Mesh subMesh = new Mesh();
 
-                            if (bakeMesh && rend is SkinnedMeshRenderer smr2)
+                            if (bakeMesh.Value && rend is SkinnedMeshRenderer smr2)
                             {
                                 smr2.BakeMesh(subMesh);
                                 subMesh.name = mesh.name;
@@ -1217,7 +1223,7 @@ namespace BlendshapeCreator
 
                             sb.AppendLine($"g {subMesh.name}");
 
-                            if (exportTextures)
+                            if (exportTextures.Value)
                             {
                                 sb.AppendLine($"mtlib {filename}.mtl");
                                 sb.AppendLine($"usemtl {filename}");
@@ -1226,7 +1232,7 @@ namespace BlendshapeCreator
                             for (var i = 0; i < subMesh.vertices.Length; i++)
                             {
                                 Vector3 v = subMesh.vertices[i];
-                                if (bakeMesh)
+                                if (bakeMesh.Value)
                                     v = rend.transform.TransformPoint(inverseScale.MultiplyPoint(v));
                                 sb.AppendLine($"v {-v.x} {v.y} {v.z}");
                             }
@@ -1249,12 +1255,13 @@ namespace BlendshapeCreator
                                 sb.AppendFormat("f {0}/{0}/{0} {1}/{1}/{1} {2}/{2}/{2}\n", triangles[i] + 1, triangles[i + 2] + 1, triangles[i + 1] + 1);
                             }
 
-                            if (bakeMesh && boneMatrices != null && boneWeights != null)
+                            if (bakeMesh.Value && boneMatrices != null && boneWeights != null)
                             {
                                 string boneMatricesStr = "";
                                 for (int i = 0; i < boneMatrices.Length; i++)
                                 {
                                     Matrix4x4 matrix = boneMatrices[i];
+                                    if (matrix == null) continue;
                                     boneMatricesStr += $"{matrix.m00} {matrix.m01} {matrix.m02} {matrix.m03} {matrix.m10} {matrix.m11} {matrix.m12} {matrix.m13} {matrix.m20} {matrix.m21} {matrix.m22} {matrix.m23} {matrix.m30} {matrix.m31} {matrix.m32} {matrix.m33} ";
                                 }
                                 if (!boneMatricesStr.IsNullOrEmpty())
@@ -1266,6 +1273,7 @@ namespace BlendshapeCreator
                                 for (int i = 0; i < boneWeights.Length; i++)
                                 {
                                     BoneWeight bw = boneWeights[i];
+                                    if (bw == null) continue;
                                     boneWeightsStr += $"{bw.boneIndex0} {bw.boneIndex1} {bw.boneIndex2} {bw.boneIndex3} {bw.weight0} {bw.weight1} {bw.weight2} {bw.weight3} ";
                                 }
                                 if (!boneWeightsStr.IsNullOrEmpty())
@@ -1285,13 +1293,16 @@ namespace BlendshapeCreator
                             }
                         }
                     }
-                    catch
+                    catch (Exception ex)
                     {
-                        Logger.LogError($"Failed to export {rend.name}");
+                        Logger.LogError($"Failed to export {rend.name}, Error: {ex}");
+                        Logger.LogMessage($"Failed to export {rend.name}");
                     }
                 }
 
-                Logger.LogMessage($"Exported {exportesMeshesCount} meshes in directory {Path.GetDirectoryName(path)}");
+                if (exportesMeshesCount > 0)
+                    Logger.LogMessage($"Exported {exportesMeshesCount} meshes in directory {Path.GetDirectoryName(path)}");
+
                 selectedRenderers.Clear();
                 ClearHighlightRenderer(true, null);
             }
@@ -1328,6 +1339,15 @@ namespace BlendshapeCreator
 
                 ImportBlendshapesFromDAE(sourceMesh, path);
                 renderer.sharedMesh = sourceMesh;
+
+                if ( KKAPI.KoikatuAPI.GetCurrentGameMode() == KKAPI.GameMode.Studio)
+                {
+                    try
+                    {
+                        firstObject?.guideObject?.transformTarget.gameObject.GetComponent<PoseController>()?._blendShapesEditor.RefreshSkinnedMeshRendererList();
+                    }
+                    catch { }
+                }
 
                 string filePath = path;
                 lastImport = () =>
@@ -1434,7 +1454,7 @@ namespace BlendshapeCreator
         {
             if (clearBeforeAdding) ClearHighlightRenderer(true, null);
 
-            if (!highlightEnabled) return;
+            if (!highlightEnabled.Value) return;
 
             if (!highlightedRenderers.ContainsKey(renderer))
             {
@@ -1490,6 +1510,7 @@ namespace BlendshapeCreator
 
             string[] lines = File.ReadAllLines(filePath);
             string xmlData = "";
+
 
             // Read Bone Matrices and Weights.
 
@@ -1598,7 +1619,7 @@ namespace BlendshapeCreator
                 float x = float.Parse(floatArrayValuesbase[baseIndex]);
                 float y = float.Parse(floatArrayValuesbase[baseIndex + 1]);
                 float z = float.Parse(floatArrayValuesbase[baseIndex + 2]);
-                if (inverseX)
+                if (inverseX.Value)
                     baseVertices[i] = new Vector3(-x, y, z);
                 else
                     baseVertices[i] = new Vector3(x, y, z);
@@ -1633,7 +1654,7 @@ namespace BlendshapeCreator
                         float y = float.Parse(floatArrayValues[baseIndex + 1]);
                         float z = float.Parse(floatArrayValues[baseIndex + 2]);
 
-                        if (inverseX)
+                        if (inverseX.Value)
                             frameVertices[i] = new Vector3(-x, y, z);
                         else
                             frameVertices[i] = new Vector3(x, y, z);

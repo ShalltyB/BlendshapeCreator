@@ -10,6 +10,7 @@ using ExtensibleSaveFormat;
 using MessagePack;
 using static BlendshapeCreator.BlendshapeCreator;
 using ToolBox.Extensions;
+using HSPE;
 #if HS2
 using AIChara;
 #endif

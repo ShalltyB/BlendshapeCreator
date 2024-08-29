@@ -16,8 +16,15 @@
     <PostBuildEvent>copy /Y "..\bin\HS2_BlendshapeCreator.dll" "D:\HoneySelect 2\BepInEx\plugins\ShalltyPlugins\HS2_BlendshapeCreator.dll"</PostBuildEvent>
     <ProjectGuid>{FB471878-83F3-4BED-9C15-070C58DA5202}</ProjectGuid>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DefineConstants>TRACE;HS2, HONEYSELECT2, BEPINEX</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Reference Include="HS2PE, Version=2.13.3.1, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\packages\HSPlugins.HoneySelect2\HS2PE.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.XML" />
     <PackageReference Include="BepInEx.Core" Version="5.4.11" />
@@ -29,7 +36,13 @@
       <Version>2018.4.11.4</Version>
     </PackageReference>
     <PackageReference Include="IllusionLibs.HoneySelect2.UnityEngine.CoreModule" Version="2018.4.11.4" />
+    <PackageReference Include="IllusionLibs.HoneySelect2.UnityEngine.ImageConversionModule">
+      <Version>2018.4.11.4</Version>
+    </PackageReference>
     <PackageReference Include="IllusionLibs.HoneySelect2.UnityEngine.PhysicsModule">
+      <Version>2018.4.11.4</Version>
+    </PackageReference>
+    <PackageReference Include="IllusionLibs.HoneySelect2.UnityEngine.TextRenderingModule">
       <Version>2018.4.11.4</Version>
     </PackageReference>
     <PackageReference Include="IllusionLibs.HoneySelect2.UnityEngine.UI" Version="2018.4.11.4" />
@@ -41,4 +54,5 @@
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\..\Shared\Shared.projitems" Label="Shared" />
   <Import Project="..\BlendshapeCreator.Core\BlendshapeCreator.Core.projitems" Label="Shared" />
+  <Import Project="..\..\ToolBox\ToolBox.projitems" Label="Shared" />
 </Project>

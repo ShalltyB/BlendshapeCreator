@@ -8,6 +8,7 @@ using ExtensibleSaveFormat;
 using MessagePack;
 using static BlendshapeCreator.BlendshapeCreator;
 using ToolBox.Extensions;
+using HSPE;
 
 namespace BlendshapeCreator
 {
