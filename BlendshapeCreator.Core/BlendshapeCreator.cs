@@ -87,6 +87,7 @@ namespace BlendshapeCreator
         private ConfigEntry<bool> exportTextures;
         private ConfigEntry<bool> inverseX;
         private ConfigEntry<bool> bakeMesh;
+        private ConfigEntry<bool> importBakedMesh;
         private ConfigEntry<bool> highlightEnabled;
         private ConfigEntry<bool> showOnlyBSC;
         private ConfigEntry<bool> showHidden;
@@ -232,7 +233,7 @@ namespace BlendshapeCreator
 
                 if (KKAPI.KoikatuAPI.GetCurrentGameMode() == KKAPI.GameMode.Studio)
                 {
-                    t?.gameObject.GetComponent<PoseController>()?._blendShapesEditor?.RefreshSkinnedMeshRendererList();
+                   t?.gameObject.GetComponent<PoseController>()?._blendShapesEditor?.RefreshSkinnedMeshRendererList();
                 }
             }
         }
@@ -323,6 +324,7 @@ namespace BlendshapeCreator
             exportTextures = Config.Bind("MAIN", "Export textures", true, "Export textures to PNG files.");
             inverseX = Config.Bind("MAIN", "Inverse X", true, "Inverse X axis.");
             bakeMesh = Config.Bind("MAIN", "Bake mesh", true, "Bake mesh.");
+            importBakedMesh = Config.Bind("MAIN", "Import baked mesh", false, "Import baked mesh.");
             highlightEnabled = Config.Bind("MAIN", "Highlight enabled", true, "Highlight selected renderer.");
             showOnlyBSC = Config.Bind("MAIN", "Hide vanilla blendshapes", true, "Only show the BlendShapes created by this plugin.");
             showHidden = Config.Bind("MAIN", "Show hidden", false, "Show hidden objects in the list.");
@@ -705,6 +707,7 @@ namespace BlendshapeCreator
                     exportTextures.Value = GUILayout.Toggle(exportTextures.Value, new GUIContent("Export Textures", "Export the main texture of the selected meshes along with their .mtl file"));
                     inverseX.Value = GUILayout.Toggle(inverseX.Value, new GUIContent("Mirror X Axis", "Mirror the X axis when importing a BlendShape"));
                     bakeMesh.Value = GUILayout.Toggle(bakeMesh.Value, new GUIContent("Bake Mesh", "The exported meshes will be baked with the current pose"));
+                    importBakedMesh.Value = GUILayout.Toggle(importBakedMesh.Value, new GUIContent("Import baked Mesh", "Import meshes that were exported with Baked Mesh enabled. Also takes into account the current pose"));
 
                     IMGUIExtensions.BoolValue("Highlight Selected", highlightEnabled.Value, (b) =>
                     {
@@ -1337,16 +1340,16 @@ namespace BlendshapeCreator
                 SkinnedMeshRenderer renderer = selectedRenderer as SkinnedMeshRenderer;
                 Mesh sourceMesh = renderer.CloneSharedMesh();
 
-                ImportBlendshapesFromDAE(sourceMesh, path);
+                ImportBlendshapesFromDAE(sourceMesh, path, importBakedMesh.Value);
                 renderer.sharedMesh = sourceMesh;
 
                 if ( KKAPI.KoikatuAPI.GetCurrentGameMode() == KKAPI.GameMode.Studio)
                 {
-                    try
-                    {
-                        firstObject?.guideObject?.transformTarget.gameObject.GetComponent<PoseController>()?._blendShapesEditor.RefreshSkinnedMeshRendererList();
-                    }
-                    catch { }
+                   try
+                   {
+                       firstObject?.guideObject?.transformTarget.gameObject.GetComponent<PoseController>()?._blendShapesEditor.RefreshSkinnedMeshRendererList();
+                   }
+                   catch { }
                 }
 
                 string filePath = path;
@@ -1355,7 +1358,7 @@ namespace BlendshapeCreator
                     if (File.Exists(filePath))
                     {
                         Mesh mesh = renderer.CloneSharedMesh();
-                        ImportBlendshapesFromDAE(mesh, filePath, true);
+                        ImportBlendshapesFromDAE(mesh, filePath, importBakedMesh.Value, true);
                         renderer.sharedMesh = mesh;
                     }
                 };
@@ -1504,7 +1507,7 @@ namespace BlendshapeCreator
             }
         }
 
-        public void ImportBlendshapesFromDAE(Mesh targetMesh, string filePath, bool replace = false)
+        public void ImportBlendshapesFromDAE(Mesh targetMesh, string filePath, bool isBakedMesh, bool replace = false)
         {
             SkinnedMeshRenderer sourceRenderer = selectedRenderer as SkinnedMeshRenderer;
 
@@ -1669,10 +1672,19 @@ namespace BlendshapeCreator
 
                         if (boneWeights != null && boneMatrices != null)
                         {
-                            Vector3 unskinnedBaseVertice = MeshUtils.UnskinnedToSkinnedVertex(baseVertices[i], boneMatrices, boneWeights[i]);
-                            Vector3 unskinnedOldVertice = MeshUtils.UnskinnedToSkinnedVertex(oldVertice, boneMatrices, boneWeights[i]);
-
-                            deltaVertice = unskinnedOldVertice - unskinnedBaseVertice;
+                            if (isBakedMesh)
+                            {
+                                // Baked meshes are in world space, so we transform them back to object space here
+                                // The deltas are a vector, so we use InverseTransformVector instead of InverseTransformPoint
+                                Vector3 worldDelta = frameVertices[i] - baseVertices[i];
+                                deltaVertice = sourceRenderer.transform.InverseTransformVector(worldDelta);
+                            }
+                            else
+                            {
+                                Vector3 unskinnedBaseVertice = MeshUtils.UnskinnedToSkinnedVertex(baseVertices[i], boneMatrices, boneWeights[i]);
+                                Vector3 unskinnedOldVertice = MeshUtils.UnskinnedToSkinnedVertex(oldVertice, boneMatrices, boneWeights[i]);
+                                deltaVertice = unskinnedOldVertice - unskinnedBaseVertice;
+                            }
                         }
 
                         frameVertices[i] = deltaVertice;
